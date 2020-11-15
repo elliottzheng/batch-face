@@ -1,8 +1,13 @@
-# Face Detection
+# Batch Face for Modern Research
 
-Fast and reliable face detection with [RetinaFace](https://arxiv.org/abs/1905.00641).
+## 🚧Under Construction, not available now. 🚧
 
-This repo provides the out-of-box RetinaFace detector.
+This repo provides the out-of-box face detection and face alignment with batch input support and enables real-time application on CPU.
+
+## Features
+1. Batch input support for faster data processing.
+2. Smart API.
+3. Ultra fast.
 
 ### Requirements
 
@@ -17,21 +22,21 @@ While not required, for optimal performance it is highly recommended to run the 
 The easiest way to install it is using pip:
 
 ```bash
-pip install face-detection
+pip install batch-face
 ```
 or
 ```bash
-pip install git+https://github.com/elliottzheng/face-detection.git@master
+pip install git+https://github.com/elliottzheng/batch-face.git@master
 ```
 
 ## Usage
 ##### Detect face and five landmarks on single image
 ```python
-from skimage import io
-from face_detection import RetinaFace
+import cv2
+from batch_face import RetinaFace
 
 detector = RetinaFace()
-img= io.imread('examples/obama.jpg')
+img= cv2.imread('examples/obama.jpg')[...,::-1]
 faces = detector(img)
 box, landmarks, score = faces[0]
 ```
@@ -39,7 +44,7 @@ box, landmarks, score = faces[0]
 
 In order to specify the device (GPU or CPU) on which the code will run one can explicitly pass the device id.
 ```python
-from face_detection import RetinaFace
+from batch_face import RetinaFace
 # 0 means using GPU with id 0 for inference
 # default -1: means using cpu for inference
 detector = RetinaFace(gpu_id=0) 
@@ -57,11 +62,11 @@ All the input images must of the same size.
 **Detector with CUDA process batch input faster than the same amount of single input.** 
 
 ```python
-from skimage import io
-from face_detection import RetinaFace
+import cv2
+from batch_face import RetinaFace
 
 detector = RetinaFace()
-img= io.imread('examples/obama.jpg')
+img= cv2.imread('examples/obama.jpg')[...,::-1]
 all_faces = detector([img,img]) # return faces list of all images
 box, landmarks, score = all_faces[0][0]
 ```

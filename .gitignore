@@ -2,3 +2,5 @@ dist
 build
 .idea
 **/__pycache__
+*.egg-info
+test_results

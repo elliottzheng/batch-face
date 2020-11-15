@@ -9,6 +9,11 @@ import torch.nn.functional as F
 import torchvision.models._utils as _utils
 
 
+pretrained_urls = {
+    "mobilenet": "https://github.com/elliottzheng/face-detection/releases/download/0.0.1/mobilenet0.25_Final.pth"
+}
+
+
 def conv_bn(inp, oup, stride=1, leaky=0):
     return nn.Sequential(
         nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
@@ -19,7 +24,8 @@ def conv_bn(inp, oup, stride=1, leaky=0):
 
 def conv_bn_no_relu(inp, oup, stride):
     return nn.Sequential(
-        nn.Conv2d(inp, oup, 3, stride, 1, bias=False), nn.BatchNorm2d(oup),
+        nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+        nn.BatchNorm2d(oup),
     )
 
 
@@ -433,16 +439,20 @@ def remove_prefix(state_dict, prefix):
     return {f(key): value for key, value in state_dict.items()}
 
 
-def load_model(model, pretrained_path, load_to_cpu):
-    if load_to_cpu:
-        pretrained_dict = torch.load(
-            pretrained_path, map_location=lambda storage, loc: storage
-        )
+def load_model(model, pretrained_path, load_to_cpu, network: str):
+    if pretrained_path is None:
+        url = pretrained_urls[network]
+        pretrained_dict = torch.utils.model_zoo.load_url(url)
     else:
-        device = torch.cuda.current_device()
-        pretrained_dict = torch.load(
-            pretrained_path, map_location=lambda storage, loc: storage.cuda(device)
-        )
+        if load_to_cpu:
+            pretrained_dict = torch.load(
+                pretrained_path, map_location=lambda storage, loc: storage
+            )
+        else:
+            device = torch.cuda.current_device()
+            pretrained_dict = torch.load(
+                pretrained_path, map_location=lambda storage, loc: storage.cuda(device)
+            )
     if "state_dict" in pretrained_dict.keys():
         pretrained_dict = remove_prefix(pretrained_dict["state_dict"], "module.")
     else:
@@ -457,9 +467,11 @@ def load_net(model_path, device, network="mobilenet"):
         cfg = cfg_mnet
     elif network == "resnet50":
         cfg = cfg_re50
+    else:
+        raise NotImplementedError(network)
     # net and model
     net = RetinaFace(cfg=cfg, phase="test")
-    net = load_model(net, model_path, True)
+    net = load_model(net, model_path, True, network=network)
     net.eval()
     cudnn.benchmark = True
     net = net.to(device)
@@ -527,78 +539,82 @@ def post_process(
     return dets
 
 
-def batch_detect(net, images, device, is_tensor=False, normalized=False):
-    with torch.no_grad():
-        confidence_threshold = 0.02
-        cfg = cfg_mnet
-        top_k = 5000
-        nms_threshold = 0.4
-        keep_top_k = 750
-        resize = 1
-        if not is_tensor:
-            try:
-                img = np.float32(images)
-            except ValueError:
-                raise NotImplementedError("Input images must of same size")
-            img = torch.from_numpy(img)
-        else:
-            img = images.float()
-        img = img.to(device)
-        mean = (
-            torch.as_tensor([104, 117, 123], dtype=img.dtype, device=img.device)
-            .unsqueeze(0)
-            .unsqueeze(0)
-            .unsqueeze(0)
+@torch.no_grad()
+def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False):
+    confidence_threshold = threshold
+    cfg = cfg_mnet
+    top_k = 5000
+    nms_threshold = 0.4
+    keep_top_k = 750
+    resize = 1
+    if not is_tensor:
+        try:
+            img = np.float32(images)
+        except ValueError:
+            raise NotImplementedError("Input images must of same size")
+        img = torch.from_numpy(img)
+    else:
+        img = images.float()
+    img = img.to(device)
+    if cv:
+        img = img[..., [2, 1, 0]]
+    mean = torch.as_tensor([104, 117, 123], dtype=img.dtype, device=img.device).view(
+        1, 1, 1, 3
+    )
+    img -= mean
+    img = img.permute(0, 3, 1, 2)
+    (
+        batch_size,
+        _,
+        im_height,
+        im_width,
+    ) = img.shape
+    scale = torch.as_tensor(
+        [im_width, im_height, im_width, im_height],
+        dtype=img.dtype,
+        device=img.device,
+    )
+    scale = scale.to(device)
+
+    loc, conf, landms = net(img)  # forward pass
+
+    priorbox = PriorBox(cfg, image_size=(im_height, im_width))
+    priors = priorbox.forward()
+    prior_data = priors.to(device)
+    scale1 = torch.as_tensor(
+        [
+            img.shape[3],
+            img.shape[2],
+            img.shape[3],
+            img.shape[2],
+            img.shape[3],
+            img.shape[2],
+            img.shape[3],
+            img.shape[2],
+            img.shape[3],
+            img.shape[2],
+        ],
+        dtype=img.dtype,
+        device=img.device,
+    )
+    scale1 = scale1.to(device)
+
+    all_dets = [
+        post_process(
+            loc_i,
+            conf_i,
+            landms_i,
+            prior_data,
+            cfg,
+            scale,
+            scale1,
+            resize,
+            confidence_threshold,
+            top_k,
+            nms_threshold,
+            keep_top_k,
         )
-        img -= mean
-        img = img.permute(0, 3, 1, 2)
-        batch_size, _, im_height, im_width, = img.shape
-        scale = torch.as_tensor(
-            [im_width, im_height, im_width, im_height],
-            dtype=img.dtype,
-            device=img.device,
-        )
-        scale = scale.to(device)
+        for loc_i, conf_i, landms_i in zip(loc, conf, landms)
+    ]
 
-        loc, conf, landms = net(img)  # forward pass
-
-        priorbox = PriorBox(cfg, image_size=(im_height, im_width))
-        priors = priorbox.forward()
-        prior_data = priors.to(device)
-        scale1 = torch.as_tensor(
-            [
-                img.shape[3],
-                img.shape[2],
-                img.shape[3],
-                img.shape[2],
-                img.shape[3],
-                img.shape[2],
-                img.shape[3],
-                img.shape[2],
-                img.shape[3],
-                img.shape[2],
-            ],
-            dtype=img.dtype,
-            device=img.device,
-        )
-        scale1 = scale1.to(device)
-
-        all_dets = [
-            post_process(
-                loc_i,
-                conf_i,
-                landms_i,
-                prior_data,
-                cfg,
-                scale,
-                scale1,
-                resize,
-                confidence_threshold,
-                top_k,
-                nms_threshold,
-                keep_top_k,
-            )
-            for loc_i, conf_i, landms_i in zip(loc, conf, landms)
-        ]
-
-        return all_dets
+    return all_dets

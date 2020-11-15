@@ -20,7 +20,7 @@ class RetinaFace:
     def __init__(
         self,
         gpu_id=-1,
-        model_path=relative("weights/mobilenet0.25_Final.pth"),
+        model_path=None,
         network="mobilenet",
     ):
         self.gpu_id = gpu_id
@@ -29,21 +29,29 @@ class RetinaFace:
         )
         self.model = load_net(model_path, self.device, network)
 
-    def detect(self, images):
+    def detect(self, images, **kwargs):
+        """
+        cv_style: True if is bgr
+        """
+        kwargs["device"] = self.device
         if isinstance(images, np.ndarray):
             if len(images.shape) == 3:
-                return batch_detect(self.model, [images], self.device)[0]
+                return batch_detect(self.model, [images], **kwargs)[0]
             elif len(images.shape) == 4:
-                return batch_detect(self.model, images, self.device)
+                return batch_detect(self.model, images, **kwargs)
         elif isinstance(images, list):
-            return batch_detect(self.model, np.array(images), self.device)
+            return batch_detect(self.model, np.array(images), **kwargs)
         elif isinstance(images, torch.Tensor):
+            kwargs["is_tensor"] = True
             if len(images.shape) == 3:
-                return batch_detect(self.model, images.unsqueeze(0), self.device)[0]
+                return batch_detect(self.model, images.unsqueeze(0), **kwargs)[0]
             elif len(images.shape) == 4:
-                return batch_detect(self.model, images, self.device)
+                return batch_detect(self.model, images, **kwargs)
         else:
             raise NotImplementedError()
 
-    def __call__(self, images):
-        return self.detect(images)
+    def pseudo_batch_detect(self, images, **kwargs):
+        return [self.detect(image, **kwargs) for image in images]
+
+    def __call__(self, images, **kwargs):
+        return self.detect(images, **kwargs)
