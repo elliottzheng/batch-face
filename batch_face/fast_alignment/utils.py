@@ -57,3 +57,9 @@ def detection_adapter(all_faces, batch=False):
         return [box for box, _, _ in all_faces]  # 是单层列表
     else:
         return [[box for box, _, _ in faces] for faces in all_faces]  # 双层列表
+
+
+def to_numpy(tensor):
+    return (
+        tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
+    )

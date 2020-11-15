@@ -1,6 +1,3 @@
-# Face alignment demo
-# Uses MTCNN as face detector
-# Cunjian Chen (ccunjian@gmail.com)
 from batch_face.fast_alignment.utils import load_weights
 import torch
 import cv2
@@ -8,6 +5,14 @@ import numpy as np
 from torch.utils.data import DataLoader
 from .basenet import MobileNet_GDConv
 from .pfld_compressed import PFLDInference
+from .utils import detection_adapter, is_image, is_box, to_numpy
+
+try:
+    import onnx
+    import onnxruntime
+except:
+    onnx = None
+    onnxruntime = None
 
 
 def get_device(gpu_id):
@@ -19,14 +24,16 @@ def get_device(gpu_id):
 
 # landmark of (5L, 2L) from [0,1] to real range
 def reproject(bbox, landmark):
-    landmark_ = landmark.clone()
+    landmark_ = (
+        landmark.clone() if isinstance(landmark, torch.Tensor) else landmark.copy()
+    )
     x1, y1, x2, y2 = bbox
     w = x2 - x1
     h = y2 - y1
-    landmark_[:, 0] *= w
-    landmark_[:, 0] += x1
-    landmark_[:, 1] *= h
-    landmark_[:, 1] += y1
+    landmark_[:, 0] *= float(w)
+    landmark_[:, 0] += float(x1)
+    landmark_[:, 1] *= float(h)
+    landmark_[:, 1] += float(y1)
     return landmark_
 
 
@@ -109,7 +116,7 @@ def batch_predict(model, feeds, device):
 
 
 @torch.no_grad()
-def batch_predict2(model, feeds, device, batch_size=None):
+def batch_predict_with_loader(model, feeds, device, batch_size=None):
     if not isinstance(feeds, list):
         feeds = [feeds]
     if batch_size is None:
@@ -136,11 +143,43 @@ def split_feeds(all_feeds, all_faces):
     return [all_feeds[ends[i - 1] : ends[i]] for i in range(1, len(ends))]
 
 
-from .utils import detection_adapter, is_image, is_box
+@torch.no_grad()
+def batch_predict_onnx(ort_session, feeds, batch_size=None):
+    if not isinstance(feeds, list):
+        feeds = [feeds]
+    if batch_size is None:
+        batch_size = len(feeds)
+    results = []
+    for feed in feeds:
+        ort_inputs = {
+            ort_session.get_inputs()[0].name: to_numpy(feed["data"])[
+                None,
+            ]
+        }
+        landmark = ort_session.run(None, ort_inputs)[0][0]
+        bbox = feed["bbox"]
+        landmark = landmark.reshape(-1, 2)
+        landmark = reproject(bbox, landmark)
+        results.append(landmark)
+    return results
 
 
 class LandmarkPredictor:
     def __init__(self, gpu_id=0, backbone="MobileNet", file=None):
+        if gpu_id == "onnx":
+            self._initialize_onnx(backbone, file)
+        else:
+            self._initialize_normal(gpu_id, backbone, file)
+
+    def _initialize_onnx(self, backbone, file):
+        self.device = "onnx"
+        self.backbone = backbone
+        onnx_model = onnx.load(file)
+        onnx.checker.check_model(onnx_model)
+        self.model = onnxruntime.InferenceSession(file)
+        self._batch_predict = batch_predict_onnx
+
+    def _initialize_normal(self, gpu_id=0, backbone="MobileNet", file=None):
         self.device = get_device(gpu_id)
         self.backbone = backbone
         if backbone == "MobileNet":
@@ -148,12 +187,14 @@ class LandmarkPredictor:
         elif backbone == "PFLD":
             model = PFLDInference()
         else:
-            raise NotADirectoryError(backbone)
+            raise NotImplementedError(backbone)
 
         weights = load_weights(file, backbone)
 
         model.load_state_dict(weights)
         self.model = model.to(self.device).eval()
+
+        self._batch_predict = batch_predict_with_loader
 
     def __call__(self, all_boxes, all_images, from_fd=False):
         batch = not is_image(all_images)
@@ -172,7 +213,7 @@ class LandmarkPredictor:
             return self.batch_predict(all_boxes, all_images)  # 多张图 多个box列表
 
     def _inner_predict(self, feeds):
-        results = batch_predict2(self.model, feeds, self.device)
+        results = self._batch_predict(self.model, feeds, self.device)
         if not isinstance(feeds, list):
             results = results[0]
         return results
