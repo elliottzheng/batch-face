@@ -1,6 +1,6 @@
 from os import path as os_path
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 import batch_face
 
@@ -39,6 +39,6 @@ setup(
     },
     long_description=read_file("README.md"),  # 读取的Readme文档内容
     long_description_content_type="text/markdown",  # 指定包文档格式为markdown
-    packages=["batch_face"],
+    packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     install_requires=["numpy", "torch", "torchvision"],
 )
