@@ -4,7 +4,6 @@ from batch_face import (
     drawLandmark_multiple,
     LandmarkPredictor,
 )
-from contexttimer import Timer
 import os
 
 if __name__ == "__main__":
@@ -18,12 +17,11 @@ if __name__ == "__main__":
         img = cv2.imread(os.path.join("examples", name))
         all_images.append(img)
 
-    all_faces = detector.pseudo_batch_detect(all_images, cv=True, threshold=0.9)
+    all_faces = detector.pseudo_batch_detect(
+        all_images, cv=True, threshold=0.9
+    )  # 图不一样大 就只有伪 batch input
 
-    with Timer() as t:
-        all_results = predictor(all_faces, all_images, from_fd=True)
-        print(all_results)
-    print(t.elapsed)
+    all_results = predictor(all_faces, all_images, from_fd=True)
 
     assert len(all_results) == len(all_faces)
 

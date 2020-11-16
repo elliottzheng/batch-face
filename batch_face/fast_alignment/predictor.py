@@ -5,7 +5,14 @@ import numpy as np
 from torch.utils.data import DataLoader
 from .basenet import MobileNet_GDConv
 from .pfld_compressed import PFLDInference
-from .utils import detection_adapter, is_image, is_box, to_numpy
+from .utils import (
+    auto_download_from_url,
+    detection_adapter,
+    get_default_onnx_file,
+    is_image,
+    is_box,
+    to_numpy,
+)
 
 try:
     import onnx
@@ -17,7 +24,7 @@ except:
 
 def get_device(gpu_id):
     if gpu_id > -1:
-        return torch.device(f"cuda:{str(gpu_id)}")
+        return torch.device("cuda:%s" % str(gpu_id))
     else:
         return torch.device("cpu")
 
@@ -166,6 +173,9 @@ def batch_predict_onnx(ort_session, feeds, batch_size=None):
 
 class LandmarkPredictor:
     def __init__(self, gpu_id=0, backbone="MobileNet", file=None):
+        """
+        gpu_id: -1 for cpu, onnx for onnx
+        """
         if gpu_id == "onnx":
             self._initialize_onnx(backbone, file)
         else:
@@ -173,7 +183,11 @@ class LandmarkPredictor:
 
     def _initialize_onnx(self, backbone, file):
         self.device = "onnx"
+        if onnx is None:
+            raise "Please install onnx and onnx runtime first"
         self.backbone = backbone
+        if file is None:
+            file = get_default_onnx_file(backbone)
         onnx_model = onnx.load(file)
         onnx.checker.check_model(onnx_model)
         self.model = onnxruntime.InferenceSession(file)

@@ -1,12 +1,10 @@
 import cv2
-from contexttimer import Timer
 from batch_face import drawLandmark_multiple, RetinaFace, LandmarkPredictor
 import time
 import numpy as np
 
 if __name__ == "__main__":
-    predictor_weight = r"PFLD_for_mask.onnx"
-    predictor = LandmarkPredictor(gpu_id="onnx", backbone="PFLD", file=predictor_weight)
+    predictor = LandmarkPredictor(gpu_id=0, backbone="PFLD", file=None)
     detector = RetinaFace(0)
     cap = cv2.VideoCapture(0)
     faces = None
@@ -16,7 +14,7 @@ if __name__ == "__main__":
         ret, img = cap.read()
         if not ret:
             break
-        if faces is None:
+        if faces is None:  # 只在第一帧检测
             faces = detector(img, cv=True, threshold=0.5)
         else:
             ldm_new = results[0]
@@ -30,8 +28,7 @@ if __name__ == "__main__":
             print("NO face is detected!")
             continue
         else:
-            with Timer() as timer:
-                results = predictor(faces, img, from_fd=True)
+            results = predictor(faces, img, from_fd=True)
             for face, landmarks in zip(faces, results):
                 img = drawLandmark_multiple(img, face[0], landmarks)
 

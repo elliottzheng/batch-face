@@ -1,6 +1,5 @@
 import cv2
 from batch_face.face_detection import RetinaFace
-from contexttimer import Timer
 from batch_face import drawLandmark_multiple, LandmarkPredictor
 
 if __name__ == "__main__":
@@ -16,10 +15,7 @@ if __name__ == "__main__":
         print("NO face is detected!")
         exit(-1)
 
-    with Timer() as timer:
-        results = predictor(faces, img, from_fd=True)
-
-    print(timer.elapsed)
+    results = predictor(faces, img, from_fd=True)
 
     for face, landmarks in zip(faces, results):
         img = drawLandmark_multiple(img, face[0], landmarks)

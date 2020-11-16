@@ -7,9 +7,7 @@ from batch_face import LandmarkPredictor
 
 backbone = "PFLD"
 
-predictor = LandmarkPredictor(
-    -1, backbone=backbone, file=r"E:\MaskedFace\finetune\PFLD_9.pth"
-)
+predictor = LandmarkPredictor(-1, backbone=backbone)
 
 # Create the super-resolution model by using the above model definition.
 torch_model = predictor.model
@@ -25,11 +23,13 @@ for i in range(100):
     torch_out = torch_model(x)
 print(time.time() - start)
 
+file = backbone + ".onnx"
+
 # Export the model
 torch.onnx.export(
     torch_model,  # model being run
     x,  # model input (or a tuple for multiple inputs)
-    f"{backbone}.onnx",  # where to save the model (can be a file or file-like object)
+    file,  # where to save the model (can be a file or file-like object)
     export_params=True,  # store the trained parameter weights inside the model file
     opset_version=10,  # the ONNX version to export the model to
     do_constant_folding=True,  # whether to execute constant folding for optimization
@@ -41,11 +41,11 @@ torch.onnx.export(
     },
 )
 
-onnx_model = onnx.load(f"{backbone}.onnx")
+onnx_model = onnx.load(file)
 onnx.checker.check_model(onnx_model)
 
 
-ort_session = onnxruntime.InferenceSession(f"{backbone}.onnx")
+ort_session = onnxruntime.InferenceSession(file)
 
 
 def to_numpy(tensor):
