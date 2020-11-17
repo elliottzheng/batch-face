@@ -40,5 +40,6 @@ setup(
     long_description=read_file("README.md"),  # 读取的Readme文档内容
     long_description_content_type="text/markdown",  # 指定包文档格式为markdown
     packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
-    install_requires=["numpy", "torch", "torchvision"],
+    install_requires=["numpy", "torch", "torchvision", "opencv-python"],
+    package_data={"batch_face.face_reconstruction": ["train.configs/*"]},
 )

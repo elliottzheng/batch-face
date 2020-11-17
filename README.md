@@ -110,11 +110,4 @@ for face, landmarks in zip(faces, results):
 
 - Face Detection Network and pretrained model are from [biubug6/Pytorch_Retinaface](https://github.com/biubug6/Pytorch_Retinaface)
 - Face Alignment Network and pretrained model are from [cunjian/pytorch_face_landmark](https://github.com/cunjian/pytorch_face_landmark)
-
-```
-@inproceedings{deng2019retinaface,
-title={RetinaFace: Single-stage Dense Face Localisation in the Wild},
-author={Deng, Jiankang and Guo, Jia and Yuxiang, Zhou and Jinke Yu and Irene Kotsia and Zafeiriou, Stefanos},
-booktitle={arxiv},
-year={2019}
-```
+- Face Reconstruction Network and pretrained model are from [cleardusk/3DDFA](https://github.com/cleardusk/3DDFA)
