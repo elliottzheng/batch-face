@@ -443,9 +443,13 @@ def load_model(model, pretrained_path, load_to_cpu, network: str):
     if pretrained_path is None:
         url = pretrained_urls[network]
         if load_to_cpu:
-            pretrained_dict = torch.utils.model_zoo.load_url(url, map_location=lambda storage, loc: storage)
+            pretrained_dict = torch.utils.model_zoo.load_url(
+                url, map_location=lambda storage, loc: storage
+            )
         else:
-            pretrained_dict = torch.utils.model_zoo.load_url(url, map_location=lambda storage, loc: storage.cuda(device))
+            pretrained_dict = torch.utils.model_zoo.load_url(
+                url, map_location=lambda storage, loc: storage.cuda(device)
+            )
     else:
         if load_to_cpu:
             pretrained_dict = torch.load(

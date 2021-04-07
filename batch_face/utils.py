@@ -168,3 +168,19 @@ def bbox_from_pts(ldm_new):
     box_new[:2] -= 10
     box_new[2:] += 10
     return box_new
+
+
+class Aligner:
+    def __init__(self, standard_points, size) -> None:
+        self.standard_points = standard_points  # ndarray of N,2
+        self.size = size
+
+    def __call__(self, img, landmarks):
+        # ndarray image, landmarks N,2
+        from skimage import transform
+
+        trans = transform.SimilarityTransform()
+        res = trans.estimate(landmarks, self.standard_points)
+        M = trans.params
+        new_img = cv2.warpAffine(img, M[:2, :], dsize=(self.size, self.size))
+        return new_img
