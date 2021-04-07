@@ -1,5 +1,6 @@
 from batch_face.utils import is_box
 import os
+
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import torch
 from . import mobilenet_v1
