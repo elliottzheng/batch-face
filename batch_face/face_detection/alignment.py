@@ -10,7 +10,8 @@ import torchvision.models._utils as _utils
 
 
 pretrained_urls = {
-    "mobilenet": "https://github.com/elliottzheng/face-detection/releases/download/0.0.1/mobilenet0.25_Final.pth"
+    "mobilenet": "https://github.com/elliottzheng/face-detection/releases/download/0.0.1/mobilenet0.25_Final.pth",
+    "resnet50":"https://github.com/elliottzheng/face-detection/releases/download/0.0.1/Resnet50_Final.pth"
 }
 
 
