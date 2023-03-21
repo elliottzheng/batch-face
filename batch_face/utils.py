@@ -32,13 +32,15 @@ def drawLandmark_multiple(img, bbox=None, landmark=None, color=(0, 255, 0)):
     """
     img = cv2.UMat(img).get()
     if bbox is not None:
-        x1, y1, x2, y2 = np.array(bbox)[:4].astype(np.int)
+        x1, y1, x2, y2 = np.array(bbox)[:4].astype(np.int32)
         cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
     if landmark is not None:
-        for x, y in np.array(landmark).astype(np.int):
+        for x, y in np.array(landmark).astype(np.int32):
             cv2.circle(img, (int(x), int(y)), 2, color, -1)
     return img
 
+
+draw_landmarks=drawLandmark_multiple
 
 pretrained_urls = {
     "MobileNet": "https://github.com/elliottzheng/fast-alignment/releases/download/weights_v1/mobilenet_224_model_best_gdconv_external.pth",

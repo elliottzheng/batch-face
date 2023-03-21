@@ -169,6 +169,22 @@ def batch_predict_onnx(ort_session, feeds, batch_size=None):
         results.append(landmark)
     return results
 
+def flatten(l):
+    return [item for sublist in l for item in sublist]
+
+
+def partition(images, size):
+    """
+    Returns a new list with elements
+    of which is a list of certain size.
+
+        >>> partition([1, 2, 3, 4], 3)
+        [[1, 2, 3], [4]]
+    """
+    return [
+        images[i : i + size] if i + size <= len(images) else images[i:]
+        for i in range(0, len(images), size)
+    ]
 
 class LandmarkPredictor:
     def __init__(self, gpu_id=0, backbone="MobileNet", file=None):
@@ -209,7 +225,7 @@ class LandmarkPredictor:
 
         self._batch_predict = batch_predict_with_loader
 
-    def __call__(self, all_boxes, all_images, from_fd=False):
+    def __call__(self, all_boxes, all_images, from_fd=False, chunk_size=None):
         batch = not is_image(all_images)
         if from_fd:
             all_boxes = detection_adapter(all_boxes, batch=batch)
@@ -223,7 +239,15 @@ class LandmarkPredictor:
         else:
             assert len(all_boxes) == len(all_images)
             assert is_image(all_images[0])
-            return self.batch_predict(all_boxes, all_images)  # 多张图 多个box列表
+            # 多张图 多个box列表
+            if chunk_size is not None:
+                assert isinstance(chunk_size, int)
+                image_partitions = partition(all_images, chunk_size)
+                box_partitions = partition(all_boxes, chunk_size)
+                all_results = [self.batch_predict(boxes, images) for boxes, images in zip(box_partitions, image_partitions)]
+                return flatten(all_results)
+            else:
+                return self.batch_predict(all_boxes, all_images)
 
     def _inner_predict(self, feeds):
         results = self._batch_predict(self.model, feeds, self.device)
