@@ -91,8 +91,9 @@ detector = RetinaFace(0)
 
 imgname = "examples/obama.jpg"
 img = cv2.imread(imgname)
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-faces = detector(img, cv=True)
+faces = detector(img)
 
 if len(faces) == 0:
     print("NO face is detected!")
