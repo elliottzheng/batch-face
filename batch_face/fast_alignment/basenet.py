@@ -58,7 +58,7 @@ class SEModule(nn.Module):
 class MobileNet_GDConv(nn.Module):
     def __init__(self, num_classes):
         super(MobileNet_GDConv, self).__init__()
-        self.pretrain_net = models.mobilenet_v2(pretrained=False)
+        self.pretrain_net = models.mobilenet_v2()
         self.base_net = nn.Sequential(*list(self.pretrain_net.children())[:-1])
         self.linear7 = ConvBlock(1280, 1280, (7, 7), 1, 0, dw=True, linear=True)
         self.linear1 = ConvBlock(1280, num_classes, 1, 1, 0, linear=True)
@@ -75,7 +75,7 @@ class MobileNet_GDConv(nn.Module):
 class MobileNet_GDConv_56(nn.Module):
     def __init__(self, num_classes):
         super(MobileNet_GDConv_56, self).__init__()
-        self.pretrain_net = models.mobilenet_v2(pretrained=False)
+        self.pretrain_net = models.mobilenet_v2()
         self.base_net = nn.Sequential(*list(self.pretrain_net.children())[:-1])
         self.linear7 = ConvBlock(1280, 1280, (2, 2), 1, 0, dw=True, linear=True)
         self.linear1 = ConvBlock(1280, num_classes, 1, 1, 0, linear=True)
