@@ -2,8 +2,6 @@ from os import path as os_path
 
 from setuptools import setup, find_packages
 
-import batch_face
-
 this_directory = os_path.abspath(os_path.dirname(__file__))
 
 
@@ -25,7 +23,7 @@ def read_requirements(filename):
 
 setup(
     name="batch-face",
-    version=batch_face.__version__,
+    version="1.2.0",
     description="Batch Face Preprocessing for Modern Research",
     author="Elliott Zheng",
     author_email="admin@hypercube.top",
