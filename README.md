@@ -30,6 +30,13 @@ pip install git+https://github.com/elliottzheng/batch-face.git@master
 ```
 No extra setup needs, most of the pretrained weights will be downloaded automatically.
 
+If you have trouble install from source, you can try install from PyPI:
+
+```bash
+pip install batch-face
+```
+the PyPI version is not guaranteed to be the latest version, but we will try to keep it up to date.
+
 ## Usage
 You can clone the repo and run tests like this
 ```
