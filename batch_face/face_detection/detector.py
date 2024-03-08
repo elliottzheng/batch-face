@@ -40,10 +40,11 @@ class RetinaFace:
         gpu_id=-1,
         model_path=None,
         network="mobilenet",
+        device = "cuda"
     ):
-        self.gpu_id = gpu_id
+        self.gpu_id = gpu_id if device != "mps" else 0
         self.device = (
-            torch.device("cpu") if gpu_id == -1 else torch.device("cuda", gpu_id)
+            torch.device("cpu") if gpu_id == -1 else torch.device(device, gpu_id)
         )
         self.model = load_net(model_path, self.device, network)
 
