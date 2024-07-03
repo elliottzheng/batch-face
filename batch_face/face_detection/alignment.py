@@ -210,6 +210,7 @@ class RetinaFace(nn.Module):
         :param phase: train or test.
         """
         super(RetinaFace, self).__init__()
+        self.cfg = cfg
         self.phase = phase
         backbone = None
         if cfg["name"] == "mobilenet0.25":
@@ -482,7 +483,7 @@ def load_net(model_path, device, network="mobilenet"):
     net = RetinaFace(cfg=cfg, phase="test")
     net = load_model(net, model_path, True, network=network)
     net.eval()
-    cudnn.benchmark = True
+    # cudnn.benchmark = True
     net = net.to(device)
     return net
 
@@ -549,29 +550,78 @@ def post_process(
 
 
 @torch.no_grad()
-def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False):
+def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False, 
+                 resize = 1, 
+                 max_size: int = -1, # maximum size of the image before feeding to the model
+                 return_dict=False, 
+                 fp16=False, 
+                 resize_device='gpu'):
+    """
+    Perform batch face detection on a set of images using a given network.
+
+    Args:
+        net (torch.nn.Module): The face detection network.
+        images (numpy.ndarray or torch.Tensor): The input images. If `is_tensor` is False, it should be a numpy array. Otherwise, it should be a torch tensor.
+        device (str): The device to run the inference on (e.g., 'cpu', 'cuda').
+        is_tensor (bool, optional): Whether the input images are already torch tensors. Defaults to False.
+        threshold (float, optional): The confidence threshold for face detection. Defaults to 0.5.
+        cv (bool, optional): Whether to convert the images from BGR to RGB. Defaults to False.
+        resize (float, optional): The resize factor for the images. Defaults to 1.
+        max_size (int, optional): The maximum size of the image before feeding it to the model. Defaults to -1.
+        return_dict (bool, optional): Whether to return the results as a dictionary. Defaults to False.
+        fp16 (bool, optional): Whether to use float16 precision for inference. Defaults to False.
+        resize_device (str, optional): The device to perform image resizing on. Defaults to 'gpu'.
+
+    Returns:
+        list or list of lists: The detected faces. Each face is represented as a list containing the bounding box coordinates, landmarks, and confidence score. If `return_dict` is True, the results are returned as a list of dictionaries, where each dictionary contains the 'box', 'kps', and 'score' keys.
+
+    Raises:
+        NotImplementedError: If the input images are not of the same size.
+    """
     confidence_threshold = threshold
-    cfg = cfg_mnet
+    cfg = net.cfg
     top_k = 5000
     nms_threshold = 0.4
     keep_top_k = 750
-    resize = 1
+    if fp16:
+        dtype = torch.float16
+    else:
+        dtype = torch.float32
     if not is_tensor:
         try:
             img = np.float32(images)
         except ValueError:
             raise NotImplementedError("Input images must of same size")
         img = torch.from_numpy(img)
+    
+    if resize == 1 and max_size != -1:
+        # compute resize factor
+        resize = max_size / max(img.shape[1], img.shape[2])
+    elif resize != 1 and max_size != -1:
+        estimated_max_size = max(img.shape[1], img.shape[2]) * resize
+        if estimated_max_size > max_size: # if the estimated size is larger than the max_size, use max_size
+            resize = max_size / max(img.shape[1], img.shape[2])
+    
+    if resize != 1 and resize_device == 'cpu':
+        initial_device = 'cpu' # resize on cpu to prevent memory error
     else:
-        img = images.float()
-    img = img.to(device)
+        initial_device = device
+        
+    img = img.to(device=initial_device, dtype=dtype)
+    img = img.permute(0, 3, 1, 2) # bhwc to bchw
+    
+    if resize != 1:
+        img = F.interpolate(img, size=(int(img.shape[2] * resize), int(img.shape[3] * resize)), mode='bilinear', align_corners=False)
+
+    if initial_device != device:
+        img = img.to(device=device) 
+
     if cv:
-        img = img[..., [2, 1, 0]]
+        img = img[:, [2, 1, 0], :, :]  # rgb to bgr
     mean = torch.as_tensor([104, 117, 123], dtype=img.dtype, device=img.device).view(
-        1, 1, 1, 3
+        1, 3, 1, 1
     )
     img -= mean
-    img = img.permute(0, 3, 1, 2)
     (
         batch_size,
         _,
@@ -625,5 +675,20 @@ def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False):
         )
         for loc_i, conf_i, landms_i in zip(loc, conf, landms)
     ]
-
-    return all_dets
+    if return_dict:
+        all_dict_results = []
+        for faces in all_dets:
+            dict_results = []
+            for face in faces:
+                box, landmarks, score = face
+                dict_results.append(
+                    {
+                        "box": box,
+                        "kps": landmarks,
+                        "score": score,
+                    }
+                )
+            all_dict_results.append(dict_results)
+        return all_dict_results
+    else:
+        return all_dets

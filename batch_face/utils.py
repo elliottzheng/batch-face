@@ -12,6 +12,7 @@ import os
 import warnings
 import re
 from urllib.parse import urlparse
+import time
 
 ENV_TORCH_HOME = "TORCH_HOME"
 ENV_XDG_CACHE_HOME = "XDG_CACHE_HOME"
@@ -20,6 +21,29 @@ DEFAULT_CACHE_DIR = "~/.cache"
 # matches bfd8deac from resnet18-bfd8deac.pth
 HASH_REGEX = re.compile(r"-([a-f0-9]*)\.")
 
+# a context manager to measure time
+class Timer:
+    def __init__(self, name):
+        self.name = name
+    def __enter__(self):
+        self.start = time.time()
+    def __exit__(self, *args):
+        print(f'{self.name} took {time.time() - self.start:.2f}s')
+
+def load_frames_rgb(file,max_frames=-1,cvt_color=True): 
+    cap = cv2.VideoCapture(file)
+    frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if cvt_color:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frames.append(frame)
+        if max_frames > 0 and len(frames) >= max_frames:
+            break
+    cap.release()
+    return frames
 
 def drawLandmark_multiple(img, bbox=None, landmark=None, color=(0, 255, 0)):
     """

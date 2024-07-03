@@ -33,6 +33,9 @@ def partition(images, size):
         for i in range(0, len(images), size)
     ]
 
+def chunk_generator(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
 
 class RetinaFace:
     def __init__(
@@ -40,22 +43,36 @@ class RetinaFace:
         gpu_id=-1,
         model_path=None,
         network="mobilenet",
-        device = "cuda"
+        device = "cuda",
+        return_dict: bool = False,
+        fp16: bool = False,
     ):
         self.gpu_id = gpu_id if device != "mps" else 0
         self.device = (
             torch.device("cpu") if gpu_id == -1 else torch.device(device, gpu_id)
         )
         self.model = load_net(model_path, self.device, network)
-
-    def detect(self, images, chunk_size=None, **kwargs):
+        self.fp16 = fp16
+        if self.fp16:
+            self.model.half()
+        self.return_dict = return_dict
+    
+    @torch.inference_mode()
+    def detect(self, images, chunk_size=None, batch_size=None, **kwargs):
         """
         cv: True if is bgr
         chunk_size: batch size
         """
+        if self.fp16:
+            kwargs["fp16"] = True
+        # do not specify chunk_size and batch_size at the same time
+        assert not (chunk_size is not None and batch_size is not None), "chunk_size and batch_size cannot be specified at the same time, they are the same thing."
+
         if chunk_size is not None:
-            partitions = partition(images, chunk_size)
-            return flatten([self.detect(partition, **kwargs) for partition in partitions])
+            batch_size = chunk_size
+
+        if batch_size is not None:    
+            return flatten([self.detect(part, **kwargs) for part in chunk_generator(images, batch_size)])
 
         kwargs["device"] = self.device
         if isinstance(images, np.ndarray):
@@ -72,7 +89,7 @@ class RetinaFace:
             elif len(images.shape) == 4:
                 return batch_detect(self.model, images, **kwargs)
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(f"images type {type(images)} not supported")
 
     def pseudo_batch_detect(self, images, **kwargs):
         assert "chunk_size" not in kwargs
