@@ -30,6 +30,11 @@ class Timer:
     def __exit__(self, *args):
         print(f'{self.name} took {time.time() - self.start:.2f}s')
 
+
+def load_image_rgb(image_file):
+    image_cv2 = cv2.cvtColor(cv2.imread(image_file), cv2.COLOR_BGR2RGB)
+    return image_cv2
+
 def load_frames_rgb(file,max_frames=-1,cvt_color=True): 
     cap = cv2.VideoCapture(file)
     frames = []

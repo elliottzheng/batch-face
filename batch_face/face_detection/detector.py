@@ -65,6 +65,10 @@ class RetinaFace:
         """
         if self.fp16:
             kwargs["fp16"] = True
+
+        if 'return_dict' not in kwargs: # default return dict
+            kwargs['return_dict'] = self.return_dict
+
         # do not specify chunk_size and batch_size at the same time
         assert not (chunk_size is not None and batch_size is not None), "chunk_size and batch_size cannot be specified at the same time, they are the same thing."
 

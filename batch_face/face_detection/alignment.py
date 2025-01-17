@@ -549,6 +549,22 @@ def post_process(
     return dets
 
 
+def convert2dict(all_dets):
+    all_dict_results = []
+    for faces in all_dets:
+        dict_results = []
+        for face in faces:
+            box, landmarks, score = face
+            dict_results.append(
+                {
+                    "box": box,
+                    "kps": landmarks,
+                    "score": score,
+                }
+            )
+        all_dict_results.append(dict_results)
+    return all_dict_results
+
 @torch.no_grad()
 def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False, 
                  resize = 1, 
@@ -676,19 +692,6 @@ def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False,
         for loc_i, conf_i, landms_i in zip(loc, conf, landms)
     ]
     if return_dict:
-        all_dict_results = []
-        for faces in all_dets:
-            dict_results = []
-            for face in faces:
-                box, landmarks, score = face
-                dict_results.append(
-                    {
-                        "box": box,
-                        "kps": landmarks,
-                        "score": score,
-                    }
-                )
-            all_dict_results.append(dict_results)
-        return all_dict_results
+        return convert2dict(all_dets)
     else:
         return all_dets

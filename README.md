@@ -1,8 +1,7 @@
 # Batch Face for Modern Research
 
-## 🚧Documentation under construction, check tests folder for more details. 🚧
+This repo provides the out-of-box face detection, face alignment, head pose estimation and face parsing with batch input support and enables real-time application on CPU.
 
-This repo provides the out-of-box face detection and face alignment with batch input support and enables real-time application on CPU.
 
 ## Features
 1. Batch input support for faster data processing.
@@ -44,6 +43,8 @@ You can clone the repo and run tests like this
 python -m tests.camera
 ```
 ### Face Detection
+
+We wrap the [RetinaFace](https://github.com/biubug6/Pytorch_Retinaface) model and provide a simple API for batch face detection.
 
 ##### Detect face and five landmarks on single image
 ```python
@@ -116,6 +117,9 @@ Note: All the input images must of the same size, for input images with differen
 ![](./images/gpu_batch.png)
 
 ### Face Alignment
+
+We wrap the [Face Landmark](https://github.com/cunjian/pytorch_face_landmark) model and provide a simple API for batch face alignment.
+
 ##### face alignment on single image
 
 ```python 
@@ -141,6 +145,9 @@ for face, landmarks in zip(faces, results):
     img = drawLandmark_multiple(img, face[0], landmarks)
 ```
 ### Head Pose Estimation
+
+We wrap the [SixDRepNet](https://github.com/jahongir7174/SixDRepNet) model and provide a simple API for batch head pose estimation.
+
 ##### Head pose estimation on video
 ```python
 from batch_face import RetinaFace, SixDRep, draw_landmarks, load_frames_rgb, Timer
@@ -173,6 +180,45 @@ if vis:
 check out the result video [here](./examples/head_pose.mp4)
 you can run the script `python -m tests.video_head_pose` to see the result.
 
+### Face Parsing
+
+We wrap the [FaRL](https://github.com/FacePerceiver/farl) model from [facer](https://github.com/FacePerceiver/facer) and provide a simple API for batch face parsing.
+
+If you want to use the face parsing model, you need to install the `pyfacer>=0.0.5` package.
+```bash
+pip install pyfacer>=0.0.5 -U
+```
+
+##### Face Parsing on video
+
+```python
+import numpy as np
+import cv2
+from batch_face import RetinaFace, FarlParser, load_frames_rgb
+gpu_id = 0
+video_file = 'examples/ross.mp4'
+retinaface = RetinaFace(gpu_id)
+face_parser = FarlParser(gpu_id=gpu_id, name='farl/lapa/448') # you can choose different model from [farl/celebm/448, farl/lapa/448]
+frames = load_frames_rgb(video_file)
+all_faces = retinaface(frames, return_dict=True, threshold=0.95)
+# optional, you can do some face filtering here, for example you can filter out 
+all_faces = face_parser(frames, all_faces)
+label_names = face_parser.label_names
+
+print(label_names)
+for frame_i, (faces, frame) in enumerate(zip(all_faces, frames)):
+    for face_i, face in enumerate(faces):
+        seg_logits = face['seg_logits']
+        seg_preds = face['seg_preds']
+        vis_seg_preds = face_parser.color_lut[seg_preds]
+        # blend with input frame
+        frame = cv2.addWeighted(frame, 0.5, vis_seg_preds, 0.5, 0)
+        vis_frame = np.concatenate([vis_seg_preds, frame], axis=1)
+        cv2.imwrite(f'vis_{frame_i}_{face_i}.png', vis_frame[...,::-1])
+
+```
+check out the result images [here](./examples/ross_seg.png)
+you can run the script `python -m tests.parsing_on_video` to see the result.
 
 ## References
 
@@ -180,3 +226,4 @@ you can run the script `python -m tests.video_head_pose` to see the result.
 - Face Alignment Network and pretrained model are from [cunjian/pytorch_face_landmark](https://github.com/cunjian/pytorch_face_landmark)
 - Face Reconstruction Network and pretrained model are from [cleardusk/3DDFA](https://github.com/cleardusk/3DDFA)
 - Head Pose Estimation Network and pretrained model are from [jahongir7174/SixDRepNet](https://github.com/jahongir7174/SixDRepNet)
+- Face Parsing Network and pretrained model are from [FacePerceiver/farl](https://github.com/FacePerceiver/farl) and [FacePerceiver/facer](https://github.com/FacePerceiver/facer)
