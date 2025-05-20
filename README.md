@@ -46,7 +46,7 @@ python -m tests.camera
 
 We wrap the [RetinaFace](https://github.com/biubug6/Pytorch_Retinaface) model and provide a simple API for batch face detection.
 
-##### Detect face and five landmarks on single image
+#### Detect face and five landmarks on single image
 ```python
 import cv2
 from batch_face import RetinaFace
@@ -71,7 +71,7 @@ faces = detector(img, threshold=threshold, resize=resize, max_size=max_size)
 box, kps, score = faces[0]
 
 ```
-##### Running on CPU/GPU
+#### Running on CPU/GPU
 
 In order to specify the device (GPU or CPU) on which the code will run one can explicitly pass the device id.
 ```python
@@ -88,7 +88,7 @@ detector = RetinaFace(gpu_id=0, fp16=True)
 | SPF  | 0.022714852809906007         | 0.010347620010375976            | 0.0647138786315918                            |
 
 
-##### Batch input for faster detection
+#### Batch input for faster detection
 
 **Detector with CUDA process batch input faster than the same amount of single input.** 
 
@@ -112,15 +112,20 @@ faces = all_faces[0] # the first input image's detection result
 box, kps, score = faces[0] # the first face's detection result
 ```
 
-Note: All the input images must of the same size, for input images with different size, please use `detector.pseudo_batch_detect`.
-
 ![](./images/gpu_batch.png)
+
+#### Batch input for different size images
+
+In v1.5.2, we enhanced the batch support for different size images, so you can just pass a list of np.array to the detector, and the detector will resize the all images to the same size(specified by `max_size`, default is 640) and then do the detection, which makes it even faster the the previous implementation of `pseudo_batch_detect`, see [tests/detection_on_pseudo_batch.py](tests/detection_on_pseudo_batch.py) for more details.
+
+
+
 
 ### Face Alignment
 
 We wrap the [Face Landmark](https://github.com/cunjian/pytorch_face_landmark) model and provide a simple API for batch face alignment.
 
-##### face alignment on single image
+#### face alignment on single image
 
 ```python 
 from batch_face import drawLandmark_multiple, LandmarkPredictor, RetinaFace
@@ -148,7 +153,7 @@ for face, landmarks in zip(faces, results):
 
 We wrap the [SixDRepNet](https://github.com/jahongir7174/SixDRepNet) model and provide a simple API for batch head pose estimation.
 
-##### Head pose estimation on video
+#### Head pose estimation on video
 ```python
 from batch_face import RetinaFace, SixDRep, draw_landmarks, load_frames_rgb, Timer
 
@@ -189,7 +194,7 @@ If you want to use the face parsing model, you need to install the `pyfacer>=0.0
 pip install pyfacer>=0.0.5 -U
 ```
 
-##### Face Parsing on video
+#### Face Parsing on video
 
 ```python
 import numpy as np

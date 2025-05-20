@@ -1,6 +1,6 @@
 from itertools import product as product
 from math import ceil
-
+import cv2
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
@@ -495,6 +495,48 @@ def parse_det(det):
     return box, landmarks, score
 
 
+def resize_keep_aspect_and_pad_to_corner(images, target_size=640, is_batch=True):
+    """
+    对图片进行等比例缩放，并填充到目标尺寸的左上角
+    
+    Args:
+        images: 单张图片（H,W,3）或批量图片（B,H,W,3）的numpy数组
+        target_size: 目标尺寸，默认640x640
+        is_batch: 输入是否为批量图片
+        
+    Returns:
+        processed_images: 处理后的图片，左上角为原图，其余部分为0
+        scale_factors: 每张图片的缩放因子 (batch中每张图的缩放比例可能不同)
+    """
+    if not is_batch:
+        images = [images]  # 将单张图片包装成列表以统一处理
+        
+    processed_images = []
+    scale_factors = []
+    
+    for img in images:
+        h, w = img.shape[:2]
+        scale = min(target_size / h, target_size / w)  # 计算等比例缩放因子
+        
+        # 等比例缩放
+        new_h, new_w = int(h * scale), int(w * scale)
+        resized_img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        
+        # 创建目标尺寸的空白画布（全0，即黑色背景）
+        padded_img = np.zeros((target_size, target_size, 3), dtype=img.dtype)
+        
+        # 将缩放后的图片放置在左上角
+        padded_img[:new_h, :new_w] = resized_img
+        
+        processed_images.append(padded_img)
+        scale_factors.append(scale)
+    
+    if is_batch:
+        return np.array(processed_images), np.array(scale_factors)
+    else:
+        return processed_images[0], scale_factors[0]
+
+
 def post_process(
     loc,
     conf,
@@ -564,6 +606,170 @@ def convert2dict(all_dets):
             )
         all_dict_results.append(dict_results)
     return all_dict_results
+
+
+def post_process_for_corner_padding(
+    loc, conf, landms, prior_data, cfg, scale, scale1, resize,
+    confidence_threshold, top_k, nms_threshold, keep_top_k,
+    scale_factor
+):
+    """
+    针对左上角填充的图像进行后处理
+    
+    Args:
+        loc, conf, landms: 模型输出
+        prior_data, cfg, scale, scale1: 模型配置
+        resize: 缩放因子
+        confidence_threshold, top_k, nms_threshold, keep_top_k: NMS参数
+        scale_factor: 等比例缩放因子（将640x640还原到原图所需的因子）
+        
+    Returns:
+        检测结果列表，坐标已还原到原图尺度
+    """
+    boxes = decode(loc, prior_data, cfg["variance"])
+    boxes = boxes * scale / resize
+    boxes = boxes.cpu().numpy()
+    scores = conf.cpu().numpy()[:, 1]
+    landms_copy = decode_landm(landms, prior_data, cfg["variance"])
+    landms_copy = landms_copy * scale1 / resize
+    landms_copy = landms_copy.cpu().numpy()
+    
+    # 筛选高置信度的检测结果
+    inds = np.where(scores > confidence_threshold)[0]
+    boxes = boxes[inds]
+    landms_copy = landms_copy[inds]
+    scores = scores[inds]
+    
+    # NMS前保留top-k个结果
+    order = scores.argsort()[::-1][:top_k]
+    boxes = boxes[order]
+    landms_copy = landms_copy[order]
+    scores = scores[order]
+    
+    # 执行NMS
+    dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+    keep = py_cpu_nms(dets, nms_threshold)
+    dets = dets[keep, :]
+    landms_copy = landms_copy[keep]
+    
+    # 保留NMS后的top-k个结果
+    dets = dets[:keep_top_k, :]
+    landms_copy = landms_copy[:keep_top_k, :]
+    
+    # 特殊处理：还原到原图坐标
+    # 由于是等比例缩放后左上角填充，需要除以缩放因子
+    if scale_factor > 0:
+        # 检测框还原
+        dets[:, :4] /= scale_factor
+        
+        # 关键点还原
+        landms_copy /= scale_factor
+    
+    # 合并结果
+    dets = np.concatenate((dets, landms_copy), axis=1)
+    dets = sorted(dets, key=lambda x: x[4], reverse=True)
+    dets = [parse_det(x) for x in dets]
+    
+    return dets
+
+@torch.no_grad()
+def pseudo_batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False, 
+                 return_dict=False, 
+                 fp16=False, 
+                 max_size=-1,
+                 ):
+    """
+    批量检测人脸
+    
+    Args:
+        images: 图片列表或批量图片，每张可以是不同尺寸
+        其他参数...
+        
+    Returns:
+        检测结果，坐标已还原到原图尺度
+    """
+
+    if max_size == -1:
+        max_size = 640
+
+    # 记录原始尺寸
+    if not is_tensor:
+        orig_sizes = []
+        for img in images:
+            h, w = img.shape[:2]
+            orig_sizes.append((w, h))
+            
+        # 使用等比例缩放并填充到左上角
+        resized_imgs, scale_factors = resize_keep_aspect_and_pad_to_corner(
+            images, target_size=max_size, is_batch=True
+        )
+        # 转换为tensor
+        img = torch.from_numpy(np.float32(resized_imgs)).to(device)
+    else:
+        # 如果已经是tensor，可能需要另外的处理逻辑
+        img = images.to(device)
+        # 假设tensor已经是batch形式，收集原始尺寸
+        orig_sizes = [(img.shape[2], img.shape[1]) for _ in range(img.shape[0])]
+        scale_factors = [1.0] * img.shape[0]  # 默认缩放因子为1
+    
+    if fp16:
+        img = img.half()
+        
+    img = img.permute(0, 3, 1, 2)  # BHWC -> BCHW
+    
+    # RGB -> BGR 如果需要
+    if cv:
+        img = img[:, [2, 1, 0], :, :]
+        
+    # 标准化
+    mean = torch.as_tensor([104, 117, 123], dtype=img.dtype, device=img.device).view(1, 3, 1, 1)
+    img -= mean
+    
+    # 模型推理
+    loc, conf, landms = net(img)
+    
+    # 设置prior box
+    cfg = net.cfg
+    priorbox = PriorBox(cfg, image_size=(max_size, max_size))
+    priors = priorbox.forward()
+    prior_data = priors.to(device)
+    
+    # 设置scale和scale1
+    scale = torch.as_tensor(
+        [max_size, max_size, max_size, max_size],
+        dtype=img.dtype, device=img.device
+    )
+    scale1 = torch.as_tensor(
+        [max_size, max_size] * 5,
+        dtype=img.dtype, device=img.device
+    )
+    
+    # 后处理参数
+    confidence_threshold = threshold
+    top_k = 5000
+    nms_threshold = 0.4
+    keep_top_k = 750
+    
+    # 批量后处理，并还原到原图坐标
+    all_dets = []
+    for idx, (loc_i, conf_i, landms_i) in enumerate(zip(loc, conf, landms)):
+        scale_factor = scale_factors[idx]
+        
+        # 后处理得到在640x640上的坐标
+        dets = post_process_for_corner_padding(
+            loc_i, conf_i, landms_i, prior_data, cfg, 
+            scale, scale1, resize=1.0,
+            confidence_threshold=confidence_threshold,
+            top_k=top_k, nms_threshold=nms_threshold, 
+            keep_top_k=keep_top_k,
+            scale_factor=scale_factor,  # 传入缩放因子
+        )
+        all_dets.append(dets)
+    
+    if return_dict:
+        return convert2dict(all_dets)
+    else:
+        return all_dets
 
 @torch.no_grad()
 def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False, 

@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 
-from .alignment import load_net, batch_detect
+from .alignment import load_net, batch_detect, pseudo_batch_detect
 
 
 def get_project_dir():
@@ -75,7 +75,7 @@ class RetinaFace:
         if chunk_size is not None:
             batch_size = chunk_size
 
-        if batch_size is not None:    
+        if batch_size is not None:
             return flatten([self.detect(part, **kwargs) for part in chunk_generator(images, batch_size)])
 
         kwargs["device"] = self.device
@@ -85,7 +85,7 @@ class RetinaFace:
             elif len(images.shape) == 4:
                 return batch_detect(self.model, images, **kwargs)
         elif isinstance(images, list):
-            return batch_detect(self.model, np.array(images), **kwargs)
+            return pseudo_batch_detect(self.model, images, **kwargs)
         elif isinstance(images, torch.Tensor):
             kwargs["is_tensor"] = True
             if len(images.shape) == 3:
@@ -95,7 +95,15 @@ class RetinaFace:
         else:
             raise NotImplementedError(f"images type {type(images)} not supported")
 
-    def pseudo_batch_detect(self, images, **kwargs):
+    def pseudo_batch_detect(self, images, max_size=640, **kwargs):
+        """
+        max_size: the size that the detector will resize the image to
+        """
+        assert isinstance(images, list), "pseudo_batch_detect only support list input"
+        return self.detect(images, max_size=max_size, **kwargs)
+    
+
+    def pseudo_batch_detect_old(self, images, **kwargs):
         assert "chunk_size" not in kwargs
         return [self.detect(image, **kwargs) for image in images]
 
