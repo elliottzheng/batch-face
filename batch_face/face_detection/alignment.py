@@ -815,6 +815,8 @@ def batch_detect(net, images, device, is_tensor=False, threshold=0.5, cv=False,
         except ValueError:
             raise NotImplementedError("Input images must of same size")
         img = torch.from_numpy(img)
+    else:
+        img = images
     
     if resize == 1 and max_size != -1:
         # compute resize factor
